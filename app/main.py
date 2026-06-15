@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True) # Force reload env one last time
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -15,9 +18,20 @@ from .pii import hash_user_id, summarize_text
 from .schemas import ChatRequest, ChatResponse
 from .tracing import tracing_enabled
 
+from fastapi.middleware.cors import CORSMiddleware
+
 configure_logging()
 log = get_logger()
 app = FastAPI(title="Day 13 Observability Lab")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.add_middleware(CorrelationIdMiddleware)
 agent = LabAgent()
 
@@ -44,8 +58,13 @@ async def metrics() -> dict:
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: Request, body: ChatRequest) -> ChatResponse:
-    # TODO: Enrich logs with request context (user_id_hash, session_id, feature, model, env)
-    # bind_contextvars(...)
+    bind_contextvars(
+        user_id_hash=hash_user_id(body.user_id),
+        session_id=body.session_id,
+        feature=body.feature,
+        model=getattr(body, "model", "default-model"),
+        env=os.getenv("APP_ENV", "dev"),
+    )
     
     log.info(
         "request_received",
@@ -68,7 +87,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
             cost_usd=result.cost_usd,
             payload={"answer_preview": summarize_text(result.answer)},
         )
-        return ChatResponse(
+        response = ChatResponse(
             answer=result.answer,
             correlation_id=request.state.correlation_id,
             latency_ms=result.latency_ms,
@@ -77,7 +96,16 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
             cost_usd=result.cost_usd,
             quality_score=result.quality_score,
         )
+        
+        try:
+            from langfuse.decorators import langfuse_context
+            langfuse_context.flush()
+        except Exception:
+            pass
+            
+        return response
     except Exception as exc:  # pragma: no cover
+
         error_type = type(exc).__name__
         record_error(error_type)
         log.error(

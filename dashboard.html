@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Day 13 Observability Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .panel { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.5rem; transition: transform 0.2s; }
+        .panel:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+        .value { font-size: 2.5rem; font-weight: 700; color: #38bdf8; }
+        .sub-value { font-size: 1rem; color: #94a3b8; margin-top: 0.5rem; }
+        .glow { text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-slate-100 flex items-center gap-3">
+                <span class="text-sky-400">⚡</span> Live Observability Dashboard
+            </h1>
+            <div class="text-sm text-slate-400 flex items-center gap-2">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                Auto-refreshing (3s)
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Panel 1: Latency -->
+            <div class="panel">
+                <h2 class="text-lg font-semibold text-slate-300 mb-2">1. Latency (P50/P95/P99)</h2>
+                <div class="value" id="val-latency">0 <span class="text-lg text-slate-500">ms</span></div>
+                <div class="sub-value" id="sub-latency">P50: 0ms | P99: 0ms</div>
+                <div class="mt-4 w-full bg-slate-700 rounded-full h-1.5"><div class="bg-sky-400 h-1.5 rounded-full" style="width: 75%"></div></div>
+            </div>
+
+            <!-- Panel 2: Traffic -->
+            <div class="panel">
+                <h2 class="text-lg font-semibold text-slate-300 mb-2">2. Traffic (Total Requests)</h2>
+                <div class="value" id="val-traffic">0</div>
+                <div class="sub-value">Requests processed since startup</div>
+                <div class="mt-4 w-full bg-slate-700 rounded-full h-1.5"><div class="bg-emerald-400 h-1.5 rounded-full" style="width: 100%"></div></div>
+            </div>
+
+            <!-- Panel 3: Error Rate -->
+            <div class="panel">
+                <h2 class="text-lg font-semibold text-slate-300 mb-2">3. Error Rate</h2>
+                <div class="value text-rose-400" id="val-errors">0 <span class="text-lg text-slate-500">errors</span></div>
+                <div class="sub-value" id="sub-errors">No errors detected</div>
+                <div class="mt-4 w-full bg-slate-700 rounded-full h-1.5"><div class="bg-rose-400 h-1.5 rounded-full" style="width: 5%"></div></div>
+            </div>
+
+            <!-- Panel 4: Cost -->
+            <div class="panel">
+                <h2 class="text-lg font-semibold text-slate-300 mb-2">4. Total Cost</h2>
+                <div class="value text-emerald-400" id="val-cost">$0.0000</div>
+                <div class="sub-value" id="sub-cost">Avg: $0.000/req</div>
+                <div class="mt-4 w-full bg-slate-700 rounded-full h-1.5"><div class="bg-emerald-500 h-1.5 rounded-full" style="width: 40%"></div></div>
+            </div>
+
+            <!-- Panel 5: Tokens -->
+            <div class="panel">
+                <h2 class="text-lg font-semibold text-slate-300 mb-2">5. Token Usage</h2>
+                <div class="value text-amber-400" id="val-tokens">0 <span class="text-lg text-slate-500">tok</span></div>
+                <div class="sub-value" id="sub-tokens">In: 0 | Out: 0</div>
+                <div class="mt-4 w-full bg-slate-700 rounded-full h-1.5"><div class="bg-amber-400 h-1.5 rounded-full" style="width: 60%"></div></div>
+            </div>
+
+            <!-- Panel 6: Quality -->
+            <div class="panel">
+                <h2 class="text-lg font-semibold text-slate-300 mb-2">6. Quality Score</h2>
+                <div class="value text-indigo-400" id="val-quality">0.0 <span class="text-lg text-slate-500">/ 1.0</span></div>
+                <div class="sub-value">Average answer quality proxy</div>
+                <div class="mt-4 w-full bg-slate-700 rounded-full h-1.5"><div class="bg-indigo-400 h-1.5 rounded-full" style="width: 80%"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchMetrics() {
+            try {
+                const res = await fetch('http://127.0.0.1:8000/metrics');
+                const data = await res.json();
+                
+                document.getElementById('val-latency').innerHTML = `${data.latency_p95} <span class="text-lg text-slate-500">ms (P95)</span>`;
+                if(data.latency_p95 > 5000) {
+                    document.getElementById('val-latency').classList.add('text-rose-500');
+                    document.getElementById('val-latency').classList.remove('text-sky-400');
+                } else {
+                    document.getElementById('val-latency').classList.remove('text-rose-500');
+                    document.getElementById('val-latency').classList.add('text-sky-400');
+                }
+                document.getElementById('sub-latency').innerText = `P50: ${data.latency_p50}ms | P99: ${data.latency_p99}ms`;
+                
+                document.getElementById('val-traffic').innerText = data.traffic;
+                
+                const errorCount = Object.values(data.error_breakdown || {}).reduce((a, b) => a + b, 0);
+                document.getElementById('val-errors').innerHTML = `${errorCount} <span class="text-lg text-slate-500">errors</span>`;
+                if(errorCount > 0) {
+                    document.getElementById('sub-errors').innerText = JSON.stringify(data.error_breakdown);
+                }
+                
+                document.getElementById('val-cost').innerText = `$${data.total_cost_usd.toFixed(4)}`;
+                document.getElementById('sub-cost').innerText = `Avg: $${data.avg_cost_usd.toFixed(4)}/req`;
+                
+                const totalTokens = data.tokens_in_total + data.tokens_out_total;
+                document.getElementById('val-tokens').innerHTML = `${totalTokens} <span class="text-lg text-slate-500">tok</span>`;
+                document.getElementById('sub-tokens').innerText = `In: ${data.tokens_in_total} | Out: ${data.tokens_out_total}`;
+                
+                document.getElementById('val-quality').innerHTML = `${data.quality_avg.toFixed(2)} <span class="text-lg text-slate-500">/ 1.0</span>`;
+                
+            } catch (err) {
+                console.error("Failed to fetch metrics", err);
+            }
+        }
+
+        // Fetch immediately and then every 3 seconds
+        fetchMetrics();
+        setInterval(fetchMetrics, 3000);
+    </script>
+</body>
+</html>
